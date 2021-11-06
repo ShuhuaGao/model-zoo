@@ -6,7 +6,7 @@ using Flux
 using Flux.Data: DataLoader
 using Flux.Optimise: Optimiser, WeightDecay
 using Flux: onehotbatch, onecold
-using Flux.Losses: logitcrossentropy
+using Flux.Losses: logitcrossentropy, crossentropy
 using Statistics, Random
 using Logging: with_logger
 using TensorBoardLogger: TBLogger, tb_overwrite, set_step!, set_step_increment!
@@ -18,18 +18,17 @@ using CUDA
 # LeNet5 "constructor". 
 # The model can be adapted to any image size
 # and any number of output classes.
-function LeNet5(; imgsize=(28,28,1), nclasses=10) 
-    out_conv_size = (imgsize[1]÷4 - 3, imgsize[2]÷4 - 3, 16)
-    
+function LeNet5(; imgsize=(28,28,1), nclasses=10, tf=relu) 
     return Chain(
-            Conv((5, 5), imgsize[end]=>6, relu),
+            Conv((5, 5), imgsize[end]=>6, tf; pad=2),
             MaxPool((2, 2)),
-            Conv((5, 5), 6=>16, relu),
+            Conv((5, 5), 6=>16, tf),
             MaxPool((2, 2)),
             flatten,
-            Dense(prod(out_conv_size), 120, relu), 
-            Dense(120, 84, relu), 
-            Dense(84, nclasses)
+            Dense(400, 120, tf), 
+            Dense(120, 84, tf), 
+            Dense(84, nclasses),
+            softmax
           )
 end
 
@@ -48,7 +47,7 @@ function get_data(args)
     return train_loader, test_loader
 end
 
-loss(ŷ, y) = logitcrossentropy(ŷ, y)
+loss(ŷ, y) = crossentropy(ŷ, y)
 
 function eval_loss_accuracy(loader, model, device)
     l = 0f0
@@ -100,9 +99,9 @@ function train(; kws...)
     @info "Dataset MNIST: $(train_loader.nobs) train and $(test_loader.nobs) test examples"
 
     ## MODEL AND OPTIMIZER
-    model = LeNet5() |> device
-    @info "LeNet5 model: $(num_params(model)) trainable params"    
-    
+    model = LeNet5(tf=relu) |> device
+    @info "LeNet5 model: $(num_params(model)) trainable params\n" model    
+
     ps = Flux.params(model)  
 
     opt = ADAM(args.η) 
@@ -160,4 +159,6 @@ end
 if abspath(PROGRAM_FILE) == @__FILE__
     train()
 end
+
+train()
 
